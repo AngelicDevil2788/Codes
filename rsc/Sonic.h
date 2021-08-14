@@ -16,18 +16,18 @@ namespace Sonic
 	struct window
 	{
 		bool is_open = false;
-		HANDLE hBufferConsole = CreateConsoleScreenBuffer(GENERIC_READ | GENERIC_WRITE, 0, NULL, CONSOLE_TEXTMODE_BUFFER, NULL);
-		DWORD dwBufferBytesWritten = 0;
+		HANDLE hBufferConsole = GetStdHandle(STD_OUTPUT_HANDLE);
 		LPCWSTR name = L" ";
 		struct Buffer
 		{
-			int width = 227;
-			int height = 70;
-			wchar_t* screen = new wchar_t[width * height];
+			int width = SN_MAX_WIDTH;
+			int height = SN_MAX_HEIGHT;
+			CHAR_INFO* screen = new CHAR_INFO[width * height];
 			int* Pixel_ = new int[width * height];
 		};
 		Buffer buffer;
-		void create(int Width, int Height, LPCWSTR Name)
+		SMALL_RECT dwBufferBytesWritten = { 0, 0, (short)buffer.width, (short)buffer.height };
+		void create(int Width, int Height, int fontw, int fonth, LPCWSTR Name)
 		{
 			buffer.width = Width;
 			buffer.height = Height;
@@ -36,6 +36,16 @@ namespace Sonic
 			{
 				buffer.Pixel_[i] = 0;
 			}
+			CONSOLE_FONT_INFOEX cfi;
+			cfi.cbSize = sizeof(cfi);
+			cfi.nFont = 0;
+			cfi.dwFontSize.X = fontw;
+			cfi.dwFontSize.Y = fonth;
+			cfi.FontFamily = FF_DONTCARE;
+			cfi.FontWeight = FW_NORMAL;
+
+			wcscpy_s(cfi.FaceName, L"Lucida Console");
+			SetCurrentConsoleFontEx(hBufferConsole, false, &cfi);
 		};
 
 		bool close()
@@ -49,17 +59,15 @@ namespace Sonic
 
 	bool MakeContextCurrent(window window);
 
-	void Render();
+	void Render(short color);
 
-	void Draw(window window, wchar_t c, int w, int h);
+	void Fill(window window, wchar_t character, short color);
 
-	void Fill(window window, wchar_t c);
+	void SetBorders(window Window, wchar_t character, short color);
 
-	void SetBorders(window Window, wchar_t c);
+	void Print(window window, wstring phrase, short color, int width, int height);
 
-	void Print(window window, wstring phrase, int width, int height);
-
-	void PrintNumber(window window, int number, int width, int height);
+	void PrintNumber(window window, int number, short color, int width, int height);
 
 	void ReplaceCharacters(window window, wchar_t character1, wchar_t character2);
 
@@ -75,7 +83,11 @@ namespace Sonic
 
 	void Terminate();
 
-	struct Vertex2f
+	wstring MakeStringWide(string phrase);
+
+	int GetPos(int width, int height);
+
+	struct Vertewidth2f
 	{
 		float f1;
 		float f2;
@@ -86,7 +98,7 @@ namespace Sonic
 		float f2;
 		float f3;
 	};
-	struct Vertex2s
+	struct Vertewidth2s
 	{
 		LPCWSTR f1;
 		LPCWSTR f2;
@@ -108,76 +120,80 @@ bool Sonic::MakeContextCurrent(window window)
 	return true;
 };
 
-void Sonic::Render()
+void Sonic::Render( short color)
 {
 	for (int h = 0; h < CurrentWindow.buffer.height; h++)
 	{
 		for (int w = 0; w < CurrentWindow.buffer.width; w++)
 		{
-			CurrentWindow.buffer.screen[h * CurrentWindow.buffer.width + w] = L' ';
+			CurrentWindow.buffer.screen[h * CurrentWindow.buffer.width + w].Char.UnicodeChar = ' ';
+			CurrentWindow.buffer.screen[h * CurrentWindow.buffer.width + w].Attributes = color;
 		}
 	}
 };
 
-void Sonic::Draw(window window, wchar_t c, int w, int h)
-{
-	window.buffer.screen[(h - 1) * window.buffer.width + (w - 1)] = c;
-};
-
-void Sonic::Fill(window window, wchar_t c)
+void Sonic::Fill(window window, wchar_t character, short color)
 {
 	for (int i = 0; i < window.buffer.height; i++)
 	{
-		window.buffer.screen[i] = c;
+		window.buffer.screen[i].Char.UnicodeChar = character;
+		window.buffer.screen[i].Attributes = color;
 	}
 };
 
-void Sonic::SetBorders(window Window, wchar_t c)
+void Sonic::SetBorders(window Window, wchar_t character, short color)
 {
 	for (int h = 0; h < Window.buffer.height; h++)
 	{
 		for (int w = 0; w < Window.buffer.width; w++)
 		{
-			Window.buffer.screen[w] = c;
-			Window.buffer.screen[h * Window.buffer.width] = c;
-			Window.buffer.screen[(Window.buffer.height - 1) * Window.buffer.width + w] = c;
-			Window.buffer.screen[h * Window.buffer.width - 1] = c;
+			Window.buffer.screen[w].Char.UnicodeChar = character;
+			Window.buffer.screen[w].Attributes = color;
+			Window.buffer.screen[h * Window.buffer.width].Char.UnicodeChar = character;
+			Window.buffer.screen[h * Window.buffer.width].Attributes = color;
+			Window.buffer.screen[(Window.buffer.height - 1) * Window.buffer.width + w].Char.UnicodeChar = character;
+			Window.buffer.screen[(Window.buffer.height - 1) * Window.buffer.width + w].Attributes = color;
+			Window.buffer.screen[h * Window.buffer.width - 1].Char.UnicodeChar = character;
+			Window.buffer.screen[h * Window.buffer.width - 1].Attributes = color;
 		};
 	}
 };
 
-void Sonic::Print(window window, wstring phrase, int width, int height)
+void Sonic::Print(window window, wstring phrase, short color, int width, int height)
 {
 	for (int i = 0; i < phrase.size(); i++)
 	{
-		window.buffer.screen[(height - 1) * window.buffer.width + (width - 1) + i] = phrase.at(i);
+		window.buffer.screen[(height - 1) * window.buffer.width + (width - 1) + i].Char.UnicodeChar = phrase.at(i);
+		window.buffer.screen[(height - 1) * window.buffer.width + (width - 1) + i].Attributes = color;
 	}
 };
 
-void Sonic::PrintNumber(window window, int number, int width, int height)
+void Sonic::PrintNumber(window window, int number, short color, int width, int height)
 {
-	wsprintf(&window.buffer.screen[(height - 1) * window.buffer.width + (width - 1)], L"%d", number);
-	if (number < 10)
-		Draw(window, L' ', width + 1, height);
-	else if (number > 9 && number < 100)
-		Draw(window, L' ', width + 2, height);
-	else if (number > 99 && number < 1000)
-		Draw(window, L' ', width + 3, height);
-	else if (number > 999 && number < 1000)
-		Draw(window, L' ', width + 4, height);
-	else if (number > 9999 && number < 10000)
-		Draw(window, L' ', width + 5, height);
-	else if (number > 99999 && number < 100000)
-		Draw(window, L' ', width + 6, height);
-};
+	wchar_t Number[1000];
+	wsprintf(&Number[0], L"%d", number);
+
+	wstring No;
+	for (int i = 0; i < 1000; i++)
+	{
+		No.push_back(L' ');
+		if (Number[i] == L'\0')
+		{
+			No.pop_back();
+			break;
+		}
+		No.at(i) = Number[i];
+	}
+	Print(window, No, color, width, height);
+}
 
 void Sonic::ReplaceCharacters(window window, wchar_t character1, wchar_t character2)
 {
 	for (int p = 0; p < window.buffer.height * window.buffer.width; p++)
 	{
-		if (window.buffer.screen[p] == character1)
+		if (window.buffer.screen[p].Char.UnicodeChar == character1)
 		{
-			window.buffer.screen[p] = character2;
+			window.buffer.screen[p].Char.UnicodeChar = character2;
 		}
 	}
 };
@@ -189,7 +205,7 @@ void Sonic::Set_FPS(int frames)
 
 void Sonic::SwapBuffers()
 {
-	WriteConsoleOutputCharacter(CurrentWindow.hBufferConsole, CurrentWindow.buffer.screen, CurrentWindow.buffer.width * CurrentWindow.buffer.height, { 0,0 }, &CurrentWindow.dwBufferBytesWritten);
+	WriteConsoleOutputW(CurrentWindow.hBufferConsole, CurrentWindow.buffer.screen, { (short)CurrentWindow.buffer.width, (short)CurrentWindow.buffer.height }, { 0, 0 }, &CurrentWindow.dwBufferBytesWritten);
 };
 
 void Sonic::SwapWindow(window window1, window window2)
@@ -203,6 +219,7 @@ void Sonic::SwapWindow(window window1, window window2)
 void Sonic::MakeBufferCurrent(window window)
 {
 	CurrentWindow.buffer = window.buffer;
+	CurrentWindow.name = window.name;
 }
 
 void Sonic::TerminateIfKeyPressed(int key)
@@ -217,4 +234,22 @@ void Sonic::Terminate()
 {
 	CurrentWindow.close();
 };
+
+wstring Sonic::MakeStringWide(string phrase)
+{
+	wstring Phrase;
+
+	for (int i = 0; i < phrase.size(); i++)
+	{
+		Phrase += L" ";
+		Phrase.at(i) = (wchar_t)phrase.at(i);
+	}
+	return Phrase;
+}
+
+int Sonic::GetPos(int width, int height)
+{
+	return height * CurrentWindow.buffer.width + width;
+}
+
 #endif
